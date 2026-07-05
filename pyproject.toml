@@ -1,0 +1,23 @@
+[project]
+name = "radiology-abnormality-detection"
+version = "0.1.0"
+description = "Multi-modal DICOM abnormality detection pipeline (research prototype)."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --disable-warnings"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.mypy]
+# Lenient by design: torch/monai/pydicom ship incomplete stubs. We type-check
+# the pure-Python modules that carry the coordinate/audit/de-id logic; heavy
+# numerical modules are checked loosely.
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+files = ["src/coordinate_mapping.py", "src/audit.py", "src/deidentify.py"]

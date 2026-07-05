@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# Radiology Abnormality Detection Platform — Python dependencies
+# Tested against Python 3.10 / 3.11. Version floors are set to the earliest
+# release with the APIs used in this codebase; pin exact versions in CI.
+# ---------------------------------------------------------------------------
+
+# --- Deep learning core -----------------------------------------------------
+torch>=2.2.0                # tensor engine + autograd (CUDA build recommended)
+torchvision>=0.17.0         # detection heads (Mask R-CNN / RetinaNet), ops.nms
+
+# --- Medical imaging AI framework ------------------------------------------
+monai>=1.3.0                # transforms, 3D U-Net, PydicomReader, detection utils
+einops>=0.7.0               # tensor rearrange ops used by MONAI ViT/UNETR blocks
+
+# --- DICOM / volume IO ------------------------------------------------------
+pydicom>=2.4.0              # DICOM header + pixel parsing (metadata routing)
+SimpleITK>=2.3.0            # robust series reader, resampling fallback
+nibabel>=5.2.0              # NIfTI IO (for cached/preprocessed volumes)
+pylibjpeg>=2.0.0            # JPEG/JPEG2000/JPEG-LS transfer-syntax decoding
+pylibjpeg-libjpeg>=2.0.0    # plugin: baseline + lossless JPEG pixel data
+pylibjpeg-openjpeg>=2.0.0   # plugin: JPEG2000 pixel data (very common in CT/MR)
+
+# --- Numerics / CV ----------------------------------------------------------
+numpy>=1.24.0
+scipy>=1.11.0               # ndimage.label -> connected components for bboxes
+scikit-image>=0.22.0        # regionprops, morphology cleanup of masks
+
+# --- Foundation-model backbone (2D CXR) ------------------------------------
+transformers>=4.40.0        # AutoModel loader for microsoft/rad-dino (DINOv2)
+safetensors>=0.4.0          # weight loading
+Pillow>=10.0.0              # image IO for RAD-DINO's AutoImageProcessor
+
+# --- Explainability ---------------------------------------------------------
+grad-cam>=1.5.0             # pytorch-grad-cam: Grad-CAM / Grad-CAM++ heatmaps
+
+# --- Serving / utils (optional but recommended) ----------------------------
+pytorch-lightning>=2.2.0    # training loops if/when you train the sub-models
+tqdm>=4.66.0
+pydantic>=2.6.0             # typed config + API response schemas
+
+# --- API + testing ----------------------------------------------------------
+fastapi>=0.110.0            # /analyze endpoint + category routing
+uvicorn>=0.29.0             # ASGI server
+pytest>=8.0.0              # test suite (tests/)
+mypy>=1.9.0                # static type checking (pure modules)

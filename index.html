@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Radiology Abnormality Detection — How it works</title>
+<style>
+  :root{
+    --bg:#0c141d; --panel:#131f2b; --panelHi:#1a2836; --line:#24384a;
+    --ink:#e8eef4; --mute:#8296a8; --faint:#5b6b7c;
+    --teal:#3fd0c9; --tealDim:#173f43; --amber:#f6b13c; --amberDim:#3d2e17;
+    --good:#4ec9a8; --bad:#e06c6c;
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono","Menlo",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,.mono{font-family:var(--mono)}
+  h1,h2,h3{line-height:1.2;font-weight:650;letter-spacing:-0.01em}
+  h2{font-size:1.5rem;margin:0 0 .2rem}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--teal)}
+  .muted{color:var(--mute)}
+  .faint{color:var(--faint)}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(12,20,29,.86);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:20px;height:56px}
+  nav .brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:.95rem}
+  nav .dot{width:9px;height:9px;border-radius:99px;background:var(--teal);
+    box-shadow:0 0 10px var(--teal)}
+  nav .links{margin-left:auto;display:flex;gap:18px;font-family:var(--mono);
+    font-size:.76rem}
+  nav .links a{color:var(--mute)}
+  nav .links a:hover{color:var(--teal);text-decoration:none}
+  @media(max-width:720px){nav .links{display:none}}
+
+  /* hero */
+  header.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+  .hero .grid-bg{position:absolute;inset:0;opacity:.14;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:34px 34px;mask-image:radial-gradient(ellipse at 30% 0%,#000,transparent 75%)}
+  .hero .scan{position:absolute;left:0;right:0;height:2px;background:var(--teal);
+    box-shadow:0 0 16px 3px var(--teal);animation:sweep 6s ease-in-out infinite;opacity:.5}
+  @keyframes sweep{0%{top:-2%}50%{top:102%}100%{top:-2%}}
+  .hero .wrap{position:relative;padding:64px 24px 52px}
+  .hero h1{font-size:2.5rem;margin:.4rem 0 .6rem;max-width:16ch}
+  .hero p.lead{font-size:1.08rem;max-width:60ch;color:#cdd7e1;margin:0 0 26px}
+  .chips{display:flex;flex-wrap:wrap;gap:10px}
+  .chip{font-family:var(--mono);font-size:.74rem;padding:6px 11px;border-radius:999px;
+    background:var(--panel);border:1px solid var(--line);color:var(--mute)}
+  .chip b{color:var(--teal);font-weight:600}
+  .warn{display:inline-flex;align-items:center;gap:8px;margin-top:22px;
+    font-family:var(--mono);font-size:.74rem;color:var(--amber);
+    background:var(--amberDim);border:1px solid var(--line);
+    padding:7px 12px;border-radius:8px}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  section h2 + .sub{color:var(--mute);max-width:66ch;margin:.2rem 0 26px}
+
+  /* pipeline */
+  .stages{display:flex;flex-direction:column;gap:12px}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    overflow:hidden;transition:border-color .2s}
+  .stage:hover{border-color:var(--tealDim)}
+  .stage summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+    gap:16px;padding:16px 18px}
+  .stage summary::-webkit-details-marker{display:none}
+  .stage .num{font-family:var(--mono);font-size:.8rem;color:var(--bg);
+    background:var(--teal);min-width:30px;height:30px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-weight:700}
+  .stage .st-title{font-weight:600}
+  .stage .st-file{margin-left:auto;font-family:var(--mono);font-size:.72rem;
+    color:var(--faint);white-space:nowrap}
+  .stage .chev{color:var(--mute);transition:transform .2s;margin-left:8px}
+  .stage[open] .chev{transform:rotate(90deg)}
+  .stage .body{padding:0 18px 18px 64px;color:var(--mute);font-size:.95rem}
+  .stage .body ul{margin:.3rem 0 0;padding-left:18px}
+  .stage .body li{margin:.28rem 0}
+  .stage .body b{color:var(--ink);font-weight:600}
+  .flowline{margin-left:32px;width:1px;height:10px;background:var(--line)}
+  @media(max-width:640px){
+    .stage .st-file{display:none}
+    .stage .body{padding-left:18px}
+  }
+
+  /* tables */
+  .tbl{width:100%;border-collapse:collapse;font-size:.9rem;margin-top:6px}
+  .tbl th,.tbl td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);
+    vertical-align:top}
+  .tbl th{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--faint);font-weight:600}
+  .tbl td .k{font-family:var(--mono);font-size:.82rem;color:var(--teal)}
+  .tbl tr:hover td{background:var(--panel)}
+  .tag{font-family:var(--mono);font-size:.68rem;padding:2px 7px;border-radius:5px;
+    border:1px solid var(--line);color:var(--mute);background:var(--bg);white-space:nowrap}
+  .tag.seg{color:var(--teal);border-color:var(--tealDim)}
+  .tag.cls{color:var(--amber);border-color:var(--amberDim)}
+
+  /* cards grid */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{font-size:.98rem;margin:0 0 4px}
+  .card .file{font-family:var(--mono);font-size:.72rem;color:var(--teal);margin-bottom:8px}
+  .card p{margin:0;color:var(--mute);font-size:.88rem}
+
+  /* test status */
+  .tests{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .test{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .test .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .test .name{font-family:var(--mono);font-size:.82rem}
+  .badge{font-family:var(--mono);font-size:.68rem;padding:3px 9px;border-radius:999px;font-weight:700}
+  .badge.pass{color:var(--good);background:rgba(78,201,168,.12);border:1px solid rgba(78,201,168,.35)}
+  .test p{margin:8px 0 0;font-size:.84rem;color:var(--mute)}
+
+  /* roadmap */
+  .road{display:flex;flex-direction:column;gap:8px}
+  .item{display:flex;gap:14px;align-items:flex-start;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .item .state{font-family:var(--mono);font-size:.66rem;font-weight:700;padding:3px 8px;
+    border-radius:6px;white-space:nowrap;margin-top:2px}
+  .state.done{color:var(--good);background:rgba(78,201,168,.12);border:1px solid rgba(78,201,168,.3)}
+  .state.todo{color:var(--amber);background:var(--amberDim);border:1px solid var(--line)}
+  .item .txt{font-size:.92rem}
+  .item .txt b{color:var(--ink)}
+  .item .txt span{color:var(--mute)}
+
+  /* code block */
+  pre{background:#070c12;border:1px solid var(--line);border-radius:10px;padding:16px;
+    overflow:auto;font-family:var(--mono);font-size:.82rem;color:#cdd7e1;line-height:1.5}
+  pre .c{color:var(--faint)}
+  pre .t{color:var(--teal)}
+  pre .a{color:var(--amber)}
+
+  /* docs manifest */
+  .docs{display:grid;grid-template-columns:1fr;gap:0}
+  .doc{display:flex;gap:14px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line)}
+  .doc .path{font-family:var(--mono);font-size:.82rem;color:var(--teal);min-width:260px}
+  .doc .desc{color:var(--mute);font-size:.9rem}
+  @media(max-width:640px){.doc{flex-direction:column;gap:2px}.doc .path{min-width:0}}
+
+  footer{padding:40px 0 60px;color:var(--faint);font-size:.82rem}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+
+  .kicker{display:inline-block;margin-bottom:10px}
+  @media(prefers-reduced-motion:reduce){.hero .scan{animation:none;display:none}}
+  :focus-visible{outline:none;box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--teal);border-radius:6px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span> Radiology Intake</div>
+    <div class="links">
+      <a href="#process">Process</a>
+      <a href="#models">Models</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#verification">Verification</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#documents">Documents</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="grid-bg"></div>
+  <div class="scan"></div>
+  <div class="wrap">
+    <span class="eyebrow kicker">Multi-modal abnormality detection · CT · MRI · Ultrasound · X-ray</span>
+    <h1>How a scan becomes a finding</h1>
+    <p class="lead">An engineering pipeline that takes a DICOM upload, routes it to a
+      modality-specific model, and returns three things: what the abnormality is,
+      where it is, and how confident the model is — with the confidence actually
+      calibrated and the coordinates mapped back to the original scan.</p>
+    <div class="chips">
+      <span class="chip"><b>5</b> scan categories</span>
+      <span class="chip"><b>2</b> localization regimes</span>
+      <span class="chip"><b>25</b> pytest checks passing</span>
+      <span class="chip"><b>12</b> source modules</span>
+      <span class="chip">PHI <b>de-identified</b></span>
+    </div>
+    <div class="warn">⚠ Research prototype — not a medical device, not for clinical use. Models are un-trained scaffolding.</div>
+  </div>
+</header>
+
+<!-- PROCESS -->
+<section id="process">
+  <div class="wrap">
+    <span class="eyebrow">01 · The process</span>
+    <h2>Eight stages, one scan</h2>
+    <p class="sub">Every upload flows through these stages. Click any stage to see what
+      happens inside it and which module owns it. The order matters: category selection
+      up front is what makes the rest modality-specific.</p>
+
+    <div class="stages">
+
+      <details class="stage" open>
+        <summary><span class="num">1</span><span class="st-title">Intake &amp; category</span>
+          <span class="st-file">ui/RadiologyIntake.jsx · api.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          The user picks a <b>scan category</b> before uploading. That choice forces routing to
+          the correct specialized model, so detection never depends on missing or mislabeled
+          DICOM tags — the single most reliable way to get modality-specific results.
+          <ul>
+            <li>Upload is gated: it unlocks only once a category arms a model.</li>
+            <li>Accepts a single frame, a multi-slice series, or a zipped study.</li>
+          </ul>
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">2</span><span class="st-title">Ingestion — DICOM → tensor</span>
+          <span class="st-file">dicom_ingestion.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          Reads the DICOM series with pydicom (tolerating corrupted headers and grouping
+          by series), assembles the pixel volume, and normalizes it into a model-ready tensor.
+          <ul>
+            <li><b>HU rescale</b> applied for CT, then window/level clip (verified applied, not assumed).</li>
+            <li><b>Orientation → RAS</b> and <b>isotropic resampling</b> for volumes; a separate 2D path for US/X-ray.</li>
+            <li>Records both affines (original + preprocessed) so detections can be mapped back later.</li>
+            <li><b>PHI is de-identified first</b> — identifiers blanked, private tags removed, UIDs remapped (grouping preserved).</li>
+          </ul>
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">3</span><span class="st-title">Routing</span>
+          <span class="st-file">label_taxonomies.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          The category maps to a registry key (e.g. <code>ct_chest_nodule_seg</code>). Category
+          selection <b>overrides</b> metadata; a metadata-based fallback exists for automated
+          pipelines where no category is supplied.
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">4</span><span class="st-title">Model &amp; inference</span>
+          <span class="st-file">model_registry.py · inference.py · cxr_rad_dino.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          The registry builds the right architecture with correct input/output channels
+          (3D U-Net, UNETR, Mask R-CNN, or the RAD-DINO CXR encoder).
+          <ul>
+            <li><b>Sliding-window inference</b> runs volumes patch-by-patch, so full-resolution CT/MR fit in memory.</li>
+            <li>The chest-X-ray path uses <b>microsoft/rad-dino</b> (DINOv2 ViT-B, 518², 37×37 patches).</li>
+          </ul>
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">5</span><span class="st-title">Localization</span>
+          <span class="st-file">confidence_localization.py · explainability.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          Two regimes, because the datasets supervise localization differently:
+          <ul>
+            <li><b>Mask → boxes</b> (LIDC, BraTS, BUSI): threshold the segmentation, label connected components, emit boxes.</li>
+            <li><b>Grad-CAM → boxes</b> (RSNA-ICH, CheXpert): the labels are image-level only, so a saliency map is thresholded into boxes. Works for CNNs and ViTs.</li>
+          </ul>
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">6</span><span class="st-title">Confidence calibration</span>
+          <span class="st-file">calibration.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          Raw softmax/sigmoid outputs are over-confident. <b>Temperature scaling</b> (one scalar
+          fit on validation data) corrects this and is applied at inference. Expected Calibration
+          Error drops ~10–20× on over-confident data; unfitted models default to a no-op.
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">7</span><span class="st-title">Coordinate mapping</span>
+          <span class="st-file">coordinate_mapping.py</span><span class="chev">›</span></summary>
+        <div class="body">
+          Boxes come out in the localizer's space (feature grid, or resampled/padded volume).
+          They're mapped back to <b>original scan voxels</b> and <b>patient world millimetres</b>
+          through the MetaTensor affines — which undo orientation flips and resampling in one step.
+        </div>
+      </details>
+      <div class="flowline"></div>
+
+      <details class="stage">
+        <summary><span class="num">8</span><span class="st-title">Output</span>
+          <span class="st-file">api.py · /analyze</span><span class="chev">›</span></summary>
+        <div class="body">
+          A JSON payload with the top finding, per-detection boxes (model / original-voxel /
+          world-mm), the calibrated confidence, the temperature applied, and the intended-use
+          disclaimer. Every inference also appends a <b>tamper-evident audit record</b>
+          (model + code version, a PHI-free content hash of the processed pixels, de-id status).
+          <pre><span class="c">// POST /analyze response (shape)</span>
+{
+  <span class="t">"model_key"</span>: "ct_chest_nodule_seg",
+  <span class="t">"top_finding"</span>: "nodule",
+  <span class="t">"confidence"</span>: 0.87,
+  <span class="t">"temperature"</span>: 1.0,
+  <span class="t">"detections"</span>: [{
+    <span class="t">"class"</span>: "nodule", <span class="t">"confidence"</span>: 0.87,
+    <span class="t">"bbox_original_voxel"</span>: [128,146, 88,101, 40,44],
+    <span class="t">"bbox_world_mm"</span>: [-44.1,-0.1, ...]
+  }],
+  <span class="a">"disclaimer"</span>: "Research prototype. Not for clinical use."
+}</pre>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- MODELS -->
+<section id="models">
+  <div class="wrap">
+    <span class="eyebrow">02 · Models &amp; data</span>
+    <h2>Category → dataset → model</h2>
+    <p class="sub">Each category is backed by a specialized model trained (in a full deployment)
+      on a public benchmark. Two of the five have only image-level labels, so their localization
+      is weakly-supervised via Grad-CAM.</p>
+
+    <table class="tbl">
+      <thead><tr>
+        <th>Category</th><th>Dataset</th><th>Target findings</th><th>Task</th><th>Localization</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><b>CT · Chest</b><br><span class="k">ct_chest_nodule_seg</span></td>
+          <td>LIDC-IDRI</td><td>Lung nodules</td>
+          <td><span class="tag seg">segmentation</span></td><td>mask → boxes</td>
+        </tr>
+        <tr>
+          <td><b>CT · Head</b><br><span class="k">ct_head_ich_classifier</span></td>
+          <td>RSNA Intracranial Hemorrhage</td>
+          <td>Epidural, intraparenchymal, intraventricular, subarachnoid, subdural</td>
+          <td><span class="tag cls">classification</span></td><td>Grad-CAM</td>
+        </tr>
+        <tr>
+          <td><b>MRI · Brain</b><br><span class="k">mr_brain_tumor_seg</span></td>
+          <td>BraTS</td><td>Whole tumor, tumor core, enhancing tumor</td>
+          <td><span class="tag seg">segmentation</span></td><td>mask → boxes</td>
+        </tr>
+        <tr>
+          <td><b>Ultrasound · Breast</b><br><span class="k">us_breast_lesion</span></td>
+          <td>BUSI</td><td>Benign, malignant lesions</td>
+          <td><span class="tag seg">detection</span></td><td>mask → boxes</td>
+        </tr>
+        <tr>
+          <td><b>X-ray · Chest</b><br><span class="k">cxr_multilabel_classifier</span></td>
+          <td>CheXpert / MIMIC-CXR</td>
+          <td>Cardiomegaly, edema, consolidation, pneumonia, effusion, +9 more</td>
+          <td><span class="tag cls">classification</span></td><td>Grad-CAM</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="faint mono" style="font-size:.76rem;margin-top:14px">Note: BraTS on-disk labels use {1:NCR/NET, 2:edema, 4:enhancing} for ≤2021 releases; 2023+ relabels enhancing 4→3. Confirm your release before building targets.</p>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="wrap">
+    <span class="eyebrow">03 · Architecture</span>
+    <h2>The modules</h2>
+    <p class="sub">Ten source modules, each with a single job. Ingestion has no heavy model
+      dependencies; the registry has no ingestion dependencies — the layers stay separable.</p>
+    <div class="cards">
+      <div class="card"><h3>Ingestion</h3><div class="file">dicom_ingestion.py</div>
+        <p>DICOM → metadata + normalized tensor; series grouping, HU windowing, geometry capture, router.</p></div>
+      <div class="card"><h3>Taxonomy &amp; routing</h3><div class="file">label_taxonomies.py</div>
+        <p>Per-model dataset, task, class map, localization strategy; category→model routing.</p></div>
+      <div class="card"><h3>Model registry</h3><div class="file">model_registry.py</div>
+        <p>Builds each architecture with correct in/out channels; loads weights when available.</p></div>
+      <div class="card"><h3>Inference</h3><div class="file">inference.py</div>
+        <p>Sliding-window volumetric inference with AMP — fits arbitrarily large CT/MR.</p></div>
+      <div class="card"><h3>Localization</h3><div class="file">confidence_localization.py</div>
+        <p>Segmentation logits → connected-component boxes + confidence (temperature-aware).</p></div>
+      <div class="card"><h3>Explainability</h3><div class="file">explainability.py</div>
+        <p>Grad-CAM → boxes for classification models; CNN and ViT (reshape_transform) paths.</p></div>
+      <div class="card"><h3>Calibration</h3><div class="file">calibration.py</div>
+        <p>Temperature scaling: fit, ECE metric, apply, per-model store. Multiclass + multilabel.</p></div>
+      <div class="card"><h3>Coordinate mapping</h3><div class="file">coordinate_mapping.py</div>
+        <p>Detection boxes → original voxel + world mm via affines; undoes resample/orientation/pad.</p></div>
+      <div class="card"><h3>RAD-DINO CXR</h3><div class="file">cxr_rad_dino.py</div>
+        <p>microsoft/rad-dino encoder + multi-label head + ViT Grad-CAM localization.</p></div>
+      <div class="card"><h3>API</h3><div class="file">api.py</div>
+        <p>FastAPI: category-forced routing, calibrated inference, mapped-coordinate output.</p></div>
+      <div class="card"><h3>Training</h3><div class="file">training/ (Lightning)</div>
+        <p>One trainer for all models: DiceCE for segmentation, BCE/CE for classification; fits + stores calibration T; saves loadable weights.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- VERIFICATION -->
+<section id="verification">
+  <div class="wrap">
+    <span class="eyebrow">04 · Verification</span>
+    <h2>What's tested, and passing</h2>
+    <p class="sub">Every non-trivial claim has a test. Outputs use random weights (no trained
+      models yet), so these validate the <em>plumbing and math</em>, not diagnostic accuracy.</p>
+    <div class="tests">
+      <div class="test">
+        <div class="row"><span class="name">run_smoke_test</span><span class="badge pass">5 / 5</span></div>
+        <p>End-to-end ingest → route → infer → localize → map, across all five modalities.</p></div>
+      <div class="test">
+        <div class="row"><span class="name">test_coordinate_mapping</span><span class="badge pass">6 / 6</span></div>
+        <p>Pad split, feature→input rescale, affine round-trip, axis permutation, real-scan round-trip.</p></div>
+      <div class="test">
+        <div class="row"><span class="name">test_sliding_window</span><span class="badge pass">5 / 5</span></div>
+        <p>ROI selection, small full-res, 256³-scale tiling, AMP path, determinism.</p></div>
+      <div class="test">
+        <div class="row"><span class="name">test_calibration</span><span class="badge pass">5 / 5</span></div>
+        <p>ECE drops for multiclass &amp; multilabel; T=1 no-op; store persists; fit→store loop.</p></div>
+      <div class="test">
+        <div class="row"><span class="name">test_rad_dino</span><span class="badge pass">GREEN</span></div>
+        <p>Production geometry (1×1370×768, 37×37 grid) + forward → Grad-CAM → boxes.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+  <div class="wrap">
+    <span class="eyebrow">05 · Roadmap</span>
+    <h2>Done &amp; next</h2>
+    <p class="sub">From the code review: bugs and optimizations, with the three highest-impact
+      items already implemented.</p>
+    <div class="road">
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>Coordinate mapping</b> <span>— boxes now returned in original voxel + world-mm space.</span></div></div>
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>Sliding-window inference</b> <span>— full-resolution CT/MR fit via patch-based inference.</span></div></div>
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>Temperature calibration</b> <span>— fit + ECE + applied at inference for both regimes.</span></div></div>
+      <div class="item"><span class="state todo">NEXT</span><div class="txt"><b>Single-channel mask squeeze bug</b> <span>— make batch handling explicit in the localizer.</span></div></div>
+      <div class="item"><span class="state todo">NEXT</span><div class="txt"><b>MONOCHROME1 inversion</b> <span>— invert inverted-grayscale images before normalization.</span></div></div>
+      <div class="item"><span class="state todo">NEXT</span><div class="txt"><b>Routing fallbacks</b> <span>— parse StudyDescription / synonyms when BodyPart is missing.</span></div></div>
+      <div class="item"><span class="state todo">NEXT</span><div class="txt"><b>Multi-frame &amp; compressed DICOM</b> <span>— expand NumberOfFrames; exercise JPEG2000 plugins.</span></div></div>
+      <div class="item"><span class="state todo">NEXT</span><div class="txt"><b>Caching &amp; connected-components perf</b> <span>— cache the CXR processor; cap regions / use cc3d.</span></div></div>
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>PHI de-identification &amp; audit trail</b> <span>— strip identifiers + remap UIDs; hash-chained inference log.</span></div></div>
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>pytest + CI</b> <span>— 22-test suite, mypy on pure modules, GitHub Actions on 3.10/3.11.</span></div></div>
+      <div class="item"><span class="state done">DONE</span><div class="txt"><b>Training pipeline</b> <span>— Lightning trainer; synthetic Dice 0.02→0.91; fits + stores calibration; real-data adapters documented.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW TO RUN -->
+<section id="run">
+  <div class="wrap">
+    <span class="eyebrow">06 · Run it</span>
+    <h2>Setup &amp; commands</h2>
+    <p class="sub">Everything runs on CPU. The tests need no data — they generate synthetic DICOM.</p>
+    <pre><span class="c"># install</span>
+pip install -r requirements.txt
+
+<span class="c"># end-to-end plumbing test across all 5 modalities</span>
+python scripts/run_smoke_test.py
+
+<span class="c"># focused tests</span>
+python scripts/test_coordinate_mapping.py
+python scripts/test_sliding_window.py
+python scripts/test_calibration.py
+python scripts/test_rad_dino.py
+
+<span class="c"># API (category-forced routing + calibrated /analyze)</span>
+cd src &amp;&amp; <span class="t">CALIBRATION_JSON</span>=calibration.json uvicorn api:app --reload
+
+<span class="c"># UI: ui/RadiologyIntake.jsx (React) — runs standalone with simulated inference,</span>
+<span class="c"># or point it at the /analyze endpoint for live results</span></pre>
+  </div>
+</section>
+
+<!-- DOCUMENTS -->
+<section id="documents">
+  <div class="wrap">
+    <span class="eyebrow">07 · Documents</span>
+    <h2>Everything in this package</h2>
+    <p class="sub">The full file set delivered alongside this page. Source under <code>src/</code>,
+      tests under <code>scripts/</code>, the interface under <code>ui/</code>.</p>
+    <div class="docs">
+      <div class="doc"><span class="path">README.md</span><span class="desc">Overview, structure, setup, per-feature usage (calibration, RAD-DINO, category intake).</span></div>
+      <div class="doc"><span class="path">ARCHITECTURE.md</span><span class="desc">System design, per-modality model recommendations, dataset gotchas, module map.</span></div>
+      <div class="doc"><span class="path">requirements.txt</span><span class="desc">Pinned dependencies (PyTorch, MONAI, pydicom, transformers, FastAPI, …).</span></div>
+      <div class="doc"><span class="path">index.html</span><span class="desc">This walkthrough &amp; document hub.</span></div>
+      <div class="doc"><span class="path">src/dicom_ingestion.py</span><span class="desc">DICOM → tensor ingestion, routing, geometry capture.</span></div>
+      <div class="doc"><span class="path">src/label_taxonomies.py</span><span class="desc">Per-model taxonomy + category routing.</span></div>
+      <div class="doc"><span class="path">src/model_registry.py</span><span class="desc">Architecture builder per registry key.</span></div>
+      <div class="doc"><span class="path">src/inference.py</span><span class="desc">Sliding-window volumetric inference (+ AMP).</span></div>
+      <div class="doc"><span class="path">src/confidence_localization.py</span><span class="desc">Segmentation logits → calibrated confidence + boxes.</span></div>
+      <div class="doc"><span class="path">src/explainability.py</span><span class="desc">Grad-CAM → boxes (CNN + ViT).</span></div>
+      <div class="doc"><span class="path">src/calibration.py</span><span class="desc">Temperature scaling: fit, ECE, apply, store.</span></div>
+      <div class="doc"><span class="path">src/deidentify.py</span><span class="desc">DICOM PHI removal, UID remapping, pipeline-tag preservation.</span></div>
+      <div class="doc"><span class="path">src/audit.py</span><span class="desc">Tamper-evident hash-chained inference audit log.</span></div>
+      <div class="doc"><span class="path">src/coordinate_mapping.py</span><span class="desc">Boxes → original voxel + world mm.</span></div>
+      <div class="doc"><span class="path">src/cxr_rad_dino.py</span><span class="desc">microsoft/rad-dino CXR encoder + head + Grad-CAM.</span></div>
+      <div class="doc"><span class="path">src/training/ (4 files)</span><span class="desc">Lightning training: synthetic dataset, data module, module, train CLI.</span></div>
+      <div class="doc"><span class="path">src/api.py</span><span class="desc">FastAPI: routing + calibrated, coordinate-mapped /analyze.</span></div>
+      <div class="doc"><span class="path">ui/RadiologyIntake.jsx</span><span class="desc">Category-gated upload interface (React).</span></div>
+      <div class="doc"><span class="path">scripts/synthetic_dicom.py</span><span class="desc">Synthetic DICOM generator (no real data).</span></div>
+      <div class="doc"><span class="path">scripts/run_smoke_test.py</span><span class="desc">End-to-end plumbing test.</span></div>
+      <div class="doc"><span class="path">scripts/test_coordinate_mapping.py</span><span class="desc">Coordinate mapping tests.</span></div>
+      <div class="doc"><span class="path">scripts/test_sliding_window.py</span><span class="desc">Memory-bounded inference tests.</span></div>
+      <div class="doc"><span class="path">scripts/test_calibration.py</span><span class="desc">Calibration / ECE tests.</span></div>
+      <div class="doc"><span class="path">scripts/test_rad_dino.py</span><span class="desc">RAD-DINO geometry + localization test.</span></div>
+      <div class="doc"><span class="path">tests/ · pyproject.toml</span><span class="desc">Canonical pytest suite (22 tests) + pytest/mypy config.</span></div>
+      <div class="doc"><span class="path">.github/workflows/ci.yml</span><span class="desc">CI: mypy + pytest on Python 3.10 / 3.11.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- INTENDED USE -->
+<section id="intended-use" style="border-bottom:none">
+  <div class="wrap">
+    <span class="eyebrow">08 · Intended use &amp; limitations</span>
+    <h2>Read this before trusting an output</h2>
+    <div class="cards" style="margin-top:18px">
+      <div class="card" style="border-color:var(--amberDim)">
+        <h3 style="color:var(--amber)">Not a medical device</h3>
+        <p>This is research/engineering scaffolding. It is not cleared or validated for diagnosis, triage, or any clinical decision.</p></div>
+      <div class="card">
+        <h3>Un-trained weights</h3>
+        <p>Models are randomly initialized. Numbers shown anywhere are placeholders until real weights are registered.</p></div>
+      <div class="card">
+        <h3>Calibration ≠ accuracy</h3>
+        <p>Temperature scaling fixes confidence honesty, not discrimination. It also assumes validation data matches deployment; site/scanner shift needs re-fitting.</p></div>
+      <div class="card">
+        <h3>Human in the loop</h3>
+        <p>Any real deployment requires trained + externally validated models, regulatory review, PHI handling, and a qualified reader making the call.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Radiology Intake · engineering walkthrough</span>
+    <span class="mono faint">Research prototype — not for clinical use</span>
+  </div>
+</footer>
+
+</body>
+</html>
